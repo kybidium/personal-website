@@ -1,0 +1,120 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+import { postDate } from "../lib/format";
+
+const posts = (await getCollection("blog", ({ data }) => !data.draft))
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, 3);
+---
+
+<Base title="Luis Ojeda">
+  <section class="hero">
+    <h1>Hi, I'm Luis.</h1>
+    <p>
+      I build software and write about what I learn along the way. This is my
+      little corner of the internet — have a look around.
+    </p>
+  </section>
+
+  <section class="recent">
+    <div class="recent-head">
+      <h2>Recent writing</h2>
+      <a class="all-link" href="/blog">All posts →</a>
+    </div>
+    <ul class="post-list">
+      {
+        posts.map((post) => (
+          <li>
+            <a class="post-card" href={`/blog/${post.id}`}>
+              <time datetime={post.data.date.toISOString()}>
+                {postDate(post.data.date)}
+              </time>
+              <h3>{post.data.title}</h3>
+              <p>{post.data.description}</p>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    padding: 1rem 0 3rem;
+  }
+
+  .hero h1 {
+    font-size: 2.6rem;
+    margin-bottom: 1rem;
+  }
+
+  .hero p {
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+    max-width: 34rem;
+  }
+
+  .recent-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .recent-head h2 {
+    font-size: 1.4rem;
+  }
+
+  .all-link {
+    font-size: 0.9rem;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .all-link:hover {
+    text-decoration: underline;
+  }
+
+  .post-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .post-card {
+    display: block;
+    background: var(--bg-raised);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    padding: 1.1rem 1.3rem;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .post-card:hover {
+    border-color: var(--green);
+    transform: translateY(-1px);
+  }
+
+  .post-card time {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .post-card h3 {
+    font-size: 1.15rem;
+    margin: 0.2rem 0 0.35rem;
+  }
+
+  .post-card p {
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+</style>

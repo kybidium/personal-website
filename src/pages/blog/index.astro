@@ -1,0 +1,81 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { postDate } from "../../lib/format";
+
+const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+---
+
+<Base title="Blog · Luis Ojeda" description="Writing by Luis Ojeda.">
+  <h1>Blog</h1>
+  <ul class="post-list">
+    {
+      posts.map((post) => (
+        <li>
+          <a class="post-row" href={`/blog/${post.id}`}>
+            <time datetime={post.data.date.toISOString()}>
+              {postDate(post.data.date)}
+            </time>
+            <div>
+              <h2>{post.data.title}</h2>
+              <p>{post.data.description}</p>
+            </div>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</Base>
+
+<style>
+  h1 {
+    font-size: 2.2rem;
+    margin-bottom: 2rem;
+  }
+
+  .post-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .post-row {
+    display: grid;
+    grid-template-columns: 9.5rem 1fr;
+    gap: 1rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--line);
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .post-row time {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    padding-top: 0.25rem;
+  }
+
+  .post-row h2 {
+    font-size: 1.2rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .post-row:hover h2 {
+    color: var(--green);
+  }
+
+  .post-row p {
+    font-size: 0.95rem;
+    color: var(--ink-soft);
+  }
+
+  @media (max-width: 540px) {
+    .post-row {
+      grid-template-columns: 1fr;
+      gap: 0.2rem;
+    }
+  }
+</style>
