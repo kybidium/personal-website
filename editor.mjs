@@ -4,9 +4,14 @@
 import { createServer } from "node:http";
 import { readFile, readdir, writeFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const PORT = 4444;
 const BLOG_DIR = new URL("./src/content/blog/", import.meta.url).pathname;
+const ROOT = new URL(".", import.meta.url).pathname;
+const run = promisify(execFile);
+const git = (...args) => run("git", args, { cwd: ROOT });
 
 function slugOf(url) {
   const slug = decodeURIComponent(url.split("/api/posts/")[1] ?? "");
@@ -56,6 +61,13 @@ const server = createServer(async (req, res) => {
       const { content } = JSON.parse(await body(req));
       await writeFile(join(BLOG_DIR, slugOf(req.url) + ".md"), content);
       json(res, 200, { ok: true });
+    } else if (req.url === "/api/publish" && req.method === "POST") {
+      await git("add", "src/content/blog");
+      const staged = (await git("diff", "--cached", "--name-only")).stdout.trim();
+      if (!staged) return json(res, 200, { published: false, message: "Nothing new to publish" });
+      await git("commit", "-m", "Update blog posts");
+      await git("push");
+      json(res, 200, { published: true, files: staged.split("\n") });
     } else if (req.url?.startsWith("/api/posts/") && req.method === "DELETE") {
       await unlink(join(BLOG_DIR, slugOf(req.url) + ".md"));
       json(res, 200, { ok: true });
@@ -134,6 +146,7 @@ const PAGE = /* html */ `<!doctype html>
   <h1>🌿 Blog editor</h1>
   <a href="http://localhost:4321/blog" target="_blank">open site ↗</a>
   <span class="status" id="status"></span>
+  <button id="publish" title="Commit &amp; push all blog changes to the live site">Publish 🌱</button>
 </header>
 <div class="wrap">
   <aside>
@@ -223,6 +236,24 @@ const PAGE = /* html */ `<!doctype html>
   };
 
   function setStatus(msg) { $("status").textContent = msg; }
+
+  $("publish").onclick = async () => {
+    if (dirty) await save();
+    if (!confirm("Publish all blog changes to luisojeda.org?")) return;
+    const btn = $("publish");
+    btn.disabled = true;
+    setStatus("publishing…");
+    try {
+      const result = await api("/api/publish", { method: "POST" });
+      setStatus(result.published
+        ? "published " + result.files.length + " file(s) ✓ — live in ~1 min"
+        : result.message);
+    } catch (err) {
+      setStatus("publish failed: " + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  };
 
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
