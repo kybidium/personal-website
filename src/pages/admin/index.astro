@@ -1,0 +1,264 @@
+---
+import Base from "../../layouts/Base.astro";
+
+// Each entry is AES-256-GCM ciphertext. The plaintext never exists in this repo.
+// Blob layout: salt(16) | iv(12) | ciphertext | tag(16), base64.
+// To add a round: drop a new `YYYY-MM-DD-slug.txt` into src/data/admin/ and it appears here.
+const files = import.meta.glob("../../data/admin/*.txt", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+const entries = Object.entries(files)
+  .map(([path, blob]) => {
+    const name = path.split("/").pop()!.replace(/\.txt$/, "");
+    const date = name.slice(0, 10);
+    const title = name
+      .slice(11)
+      .replace(/-/g, " ")
+      .replace(/^\w/, (c) => c.toUpperCase());
+    return { date, title, blob: blob.trim() };
+  })
+  .sort((a, b) => b.date.localeCompare(a.date));
+---
+
+<Base title="Admin" description="Private.">
+  <Fragment slot="head">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+  </Fragment>
+
+  <h1>Admin</h1>
+  <p class="lede">
+    Encrypted at rest. Decryption happens in this browser — nothing is sent
+    anywhere, and the server has never seen the plaintext.
+  </p>
+
+  <form id="gate" autocomplete="off">
+    <input
+      id="pw"
+      type="password"
+      placeholder="Passphrase"
+      autocomplete="current-password"
+      spellcheck="false"
+      aria-label="Passphrase"
+    />
+    <button type="submit">Unlock</button>
+  </form>
+  <p id="err" role="alert" hidden></p>
+
+  <div id="out">
+    {
+      entries.map((e) => (
+        <article class="entry" data-blob={e.blob} hidden>
+          <header>
+            <time datetime={e.date}>{e.date}</time>
+            <h2>{e.title}</h2>
+          </header>
+          <div class="body" />
+        </article>
+      ))
+    }
+  </div>
+
+  {entries.length === 0 && <p class="lede">No entries yet.</p>}
+</Base>
+
+<script>
+  const ITERATIONS = 300_000;
+
+  const b64 = (s: string) =>
+    Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+  async function decrypt(blob: string, password: string) {
+    const raw = b64(blob);
+    const salt = raw.slice(0, 16);
+    const iv = raw.slice(16, 28);
+    const body = raw.slice(28);
+
+    const base = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      "PBKDF2",
+      false,
+      ["deriveKey"],
+    );
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: ITERATIONS, hash: "SHA-256" },
+      base,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"],
+    );
+    // Throws if the passphrase is wrong — GCM authenticates before it returns.
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, body);
+    return new TextDecoder().decode(plain);
+  }
+
+  const form = document.getElementById("gate") as HTMLFormElement;
+  const pw = document.getElementById("pw") as HTMLInputElement;
+  const err = document.getElementById("err") as HTMLParagraphElement;
+  const btn = form.querySelector("button") as HTMLButtonElement;
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    err.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Deriving key…";
+
+    const entries = Array.from(
+      document.querySelectorAll<HTMLElement>(".entry"),
+    );
+
+    try {
+      for (const entry of entries) {
+        const html = await decrypt(entry.dataset.blob!, pw.value);
+        (entry.querySelector(".body") as HTMLElement).innerHTML = html;
+        entry.hidden = false;
+      }
+      form.hidden = true;
+      pw.value = "";
+    } catch {
+      err.textContent = "Wrong passphrase.";
+      err.hidden = false;
+      pw.select();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Unlock";
+    }
+  });
+</script>
+
+<style>
+  h1 {
+    font-size: 2.2rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .lede {
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+  }
+
+  form {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+    max-width: 26rem;
+  }
+
+  input {
+    flex: 1;
+    font: inherit;
+    font-size: 0.95rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg-raised);
+    color: var(--ink);
+  }
+
+  input:focus {
+    outline: 2px solid var(--green);
+    outline-offset: 1px;
+  }
+
+  button {
+    font: inherit;
+    font-size: 0.95rem;
+    font-weight: 500;
+    padding: 0.55rem 1.1rem;
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    background: var(--green);
+    color: var(--bg-raised);
+    cursor: pointer;
+  }
+
+  button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  #err {
+    color: #8a2f22;
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+  }
+
+  .entry {
+    padding-top: 1rem;
+    margin-bottom: 3rem;
+  }
+
+  .entry header {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .entry time {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+  }
+
+  .entry h2 {
+    font-size: 1.6rem;
+    margin-top: 0.2rem;
+  }
+
+  .body :global(h1) {
+    font-size: 1.5rem;
+    margin: 2.5rem 0 0.75rem;
+  }
+
+  .body :global(h2) {
+    font-size: 1.25rem;
+    margin: 2rem 0 0.6rem;
+  }
+
+  .body :global(p),
+  .body :global(ul),
+  .body :global(ol) {
+    margin-bottom: 1rem;
+  }
+
+  .body :global(ul),
+  .body :global(ol) {
+    padding-left: 1.25rem;
+  }
+
+  .body :global(li) {
+    margin-bottom: 0.35rem;
+  }
+
+  .body :global(blockquote) {
+    margin: 1.25rem 0;
+    padding: 0.1rem 0 0.1rem 1rem;
+    border-left: 3px solid var(--green);
+    background: var(--green-tint);
+    border-radius: 0 4px 4px 0;
+  }
+
+  .body :global(blockquote p) {
+    margin: 0.75rem 0;
+  }
+
+  .body :global(hr) {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 2.5rem 0;
+  }
+
+  .body :global(code) {
+    font-size: 0.9em;
+    background: var(--green-tint);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+  }
+
+  .body :global(em) {
+    color: var(--ink-soft);
+  }
+</style>
