@@ -3,7 +3,7 @@ import Base from "../../layouts/Base.astro";
 
 // Each entry is AES-256-GCM ciphertext. The plaintext never exists in this repo.
 // Blob layout: salt(16) | iv(12) | ciphertext | tag(16), base64.
-// To add a round: drop a new `YYYY-MM-DD-slug.txt` into src/data/admin/ and it appears here.
+// To add a round: `npm run encrypt -- path/to/note.md` writes src/data/admin/YYYY-MM-DD-slug.txt.
 const files = import.meta.glob("../../data/admin/*.txt", {
   query: "?raw",
   import: "default",
@@ -110,22 +110,28 @@ const entries = Object.entries(files)
       document.querySelectorAll<HTMLElement>(".entry"),
     );
 
-    try {
-      for (const entry of entries) {
+    // Entries may be under different passphrases (e.g. after a rotation), so
+    // show whichever ones this passphrase opens; fail only if none do.
+    let unlocked = 0;
+    for (const entry of entries) {
+      try {
         const html = await decrypt(entry.dataset.blob!, pw.value);
         (entry.querySelector(".body") as HTMLElement).innerHTML = html;
         entry.hidden = false;
-      }
+        unlocked++;
+      } catch {}
+    }
+
+    if (unlocked > 0) {
       form.hidden = true;
       pw.value = "";
-    } catch {
+    } else {
       err.textContent = "Wrong passphrase.";
       err.hidden = false;
       pw.select();
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Unlock";
     }
+    btn.disabled = false;
+    btn.textContent = "Unlock";
   });
 </script>
 
