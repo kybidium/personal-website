@@ -3,7 +3,8 @@ import Base from "../../layouts/Base.astro";
 
 // Each entry is AES-256-GCM ciphertext. The plaintext never exists in this repo.
 // Blob layout: salt(16) | iv(12) | ciphertext | tag(16), base64.
-// To add a round: `npm run encrypt -- path/to/note.md` writes src/data/admin/YYYY-MM-DD-slug.txt.
+// Write and edit notes under "Private notes" in the editor (`npm run edit`); it encrypts
+// in the browser and writes src/data/admin/YYYY-MM-DD-slug.txt.
 const files = import.meta.glob("../../data/admin/*.txt", {
   query: "?raw",
   import: "default",
@@ -115,7 +116,9 @@ const entries = Object.entries(files)
     let unlocked = 0;
     for (const entry of entries) {
       try {
-        const html = await decrypt(entry.dataset.blob!, pw.value);
+        const plain = await decrypt(entry.dataset.blob!, pw.value);
+        // Notes from the editor are JSON { markdown, html }; older ones are bare HTML.
+        const html = plain.startsWith("{") ? JSON.parse(plain).html : plain;
         (entry.querySelector(".body") as HTMLElement).innerHTML = html;
         entry.hidden = false;
         unlocked++;
@@ -152,6 +155,10 @@ const entries = Object.entries(files)
     gap: 0.6rem;
     margin-bottom: 1rem;
     max-width: 26rem;
+  }
+
+  form[hidden] {
+    display: none;
   }
 
   input {

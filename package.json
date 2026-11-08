@@ -7,8 +7,7 @@
     "dev": "astro dev",
     "edit": "node editor.mjs",
     "build": "astro build",
-    "preview": "astro preview",
-    "encrypt": "node encrypt-note.mjs"
+    "preview": "astro preview"
   },
   "dependencies": {
     "astro": "^5.0.0"
